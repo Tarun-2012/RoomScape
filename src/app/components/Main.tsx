@@ -17,12 +17,11 @@ const Main = () => {
     }
   };
 
-
   const generateDesign = async () => {
     if (!uploadedImage) return;
     setIsGenerating(true);
     setGeneratedImage(null);
-  
+
     try {
       // Step 1: Upload to Cloudinary
       const uploadRes = await fetch("/api/design", {
@@ -30,11 +29,11 @@ const Main = () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ base64Image: uploadedImage }),
       });
-  
+
       const uploadData = await uploadRes.json();
       const publicImageUrl = uploadData.url;
       console.log("✅ Uploaded Image URL:", publicImageUrl);
-  
+
       // Step 2: Call RoomGPT API (Replicate)
       const res = await fetch("/api/design/roomgpt", {
         method: "POST",
@@ -45,16 +44,16 @@ const Main = () => {
           style: model,
         }),
       });
-  
+
       const data = await res.json();
       console.log("🧠 RoomGPT API Response:", data);
-  
+
       const outputImage = data.image;
       if (outputImage) {
         setGeneratedImage(outputImage);
       } else {
         setGeneratedImage("⚠️ Failed to generate design.");
-      }     
+      }
     } catch (err) {
       console.error("❌ Error generating:", err);
       setGeneratedImage("❌ Failed to generate.");
@@ -145,6 +144,12 @@ const Main = () => {
           </div>
         )}
 
+        {isGenerating && (
+          <div className="text-[#795548] italic mt-4">
+            ⏳ Generating design, please wait...
+          </div>
+        )}
+
         {generatedImage && (
           <div className="border border-[#5D4037] p-3 rounded-lg relative shadow-lg">
             <img
@@ -157,11 +162,22 @@ const Main = () => {
       </div>
 
       {/* Button */}
-      <button
+      {/* <button
         onClick={generateDesign}
         className="mt-6 px-6 py-3 bg-gradient-to-r from-[#4CAF50] to-[#FFD54F] text-white rounded-lg shadow-md hover:shadow-lg transition-all duration-200"
       >
         🎨 Design This Room
+      </button> */}
+      <button
+        onClick={generateDesign}
+        disabled={isGenerating}
+        className={`mt-6 px-6 py-3 rounded-lg shadow-md transition-all duration-200 ${
+          isGenerating
+            ? "bg-gray-400 cursor-not-allowed"
+            : "bg-gradient-to-r from-[#4CAF50] to-[#FFD54F] text-white hover:shadow-lg"
+        }`}
+      >
+        {isGenerating ? "🎨 Generating..." : "🎨 Design This Room"}
       </button>
     </div>
   );
