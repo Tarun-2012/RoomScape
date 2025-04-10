@@ -17,21 +17,60 @@ const Main = () => {
     }
   };
 
-  const generateDesign = () => {
-    setIsGenerating(true);
-    setGeneratedImage(null); // Clear previous image
 
-    // Simulate an API call with a delay
-    setTimeout(() => {
+  const generateDesign = async () => {
+    if (!uploadedImage) return;
+    setIsGenerating(true);
+    setGeneratedImage(null);
+  
+    try {
+      // Step 1: Upload to Cloudinary
+      const uploadRes = await fetch("/api/design", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ base64Image: uploadedImage }),
+      });
+  
+      const uploadData = await uploadRes.json();
+      const publicImageUrl = uploadData.url;
+      console.log("✅ Uploaded Image URL:", publicImageUrl);
+  
+      // Step 2: Call RoomGPT API (Replicate)
+      const res = await fetch("/api/design/roomgpt", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          image: publicImageUrl,
+          roomType,
+          style: model,
+        }),
+      });
+  
+      const data = await res.json();
+      console.log("🧠 RoomGPT API Response:", data);
+  
+      const outputImage = data.image;
+      if (outputImage) {
+        setGeneratedImage(outputImage);
+      } else {
+        setGeneratedImage("⚠️ Failed to generate design.");
+      }     
+    } catch (err) {
+      console.error("❌ Error generating:", err);
+      setGeneratedImage("❌ Failed to generate.");
+    } finally {
       setIsGenerating(false);
-      setGeneratedImage("Generated design will appear here."); // Placeholder Text
-    }, 2000); // Simulates API delay (2 seconds)
+    }
   };
 
   return (
     <div className="flex-1 p-10 bg-[#F5EBDC] text-[#3E2723]">
-      <h2 className="text-3xl font-bold text-[#4CAF50] mb-3">🌟 Upload a Room Photo</h2>
-      <p className="text-[#5D4037] mb-6">Enhance the appearance of your room with AI-powered interior design.</p>
+      <h2 className="text-3xl font-bold text-[#4CAF50] mb-3">
+        🌟 Upload a Room Photo
+      </h2>
+      <p className="text-[#5D4037] mb-6">
+        Enhance the appearance of your room with AI-powered interior design.
+      </p>
 
       {/* Dropdowns */}
       <div className="flex gap-4">
@@ -69,7 +108,7 @@ const Main = () => {
         />
       </div>
 
-      {/* Image Display */}
+      {/* Image Display
       <div className="grid grid-cols-2 gap-6 mt-8">
         {uploadedImage && (
           <div className="border border-[#5D4037] p-3 rounded-lg relative shadow-lg">
@@ -88,6 +127,32 @@ const Main = () => {
               {generatedImage}
             </div>
           )
+        )}
+      </div> */}
+
+      {/* Image Display */}
+      <div className="grid grid-cols-2 gap-6 mt-8">
+        {uploadedImage && (
+          <div className="border border-[#5D4037] p-3 rounded-lg relative shadow-lg">
+            <span className="absolute top-2 right-2 text-[#D84315] cursor-pointer">
+              🗑
+            </span>
+            <img
+              src={uploadedImage}
+              alt="Uploaded"
+              className="w-full rounded-lg"
+            />
+          </div>
+        )}
+
+        {generatedImage && (
+          <div className="border border-[#5D4037] p-3 rounded-lg relative shadow-lg">
+            <img
+              src={generatedImage}
+              alt="Generated design"
+              className="w-full rounded-lg"
+            />
+          </div>
         )}
       </div>
 
