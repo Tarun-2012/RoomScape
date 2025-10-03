@@ -1,9 +1,45 @@
-"use client"; 
+"use client";
 
 import React, { useState } from "react";
 
-const DesignForm = ({ onSubmit }: { onSubmit: (input: string) => void }) => {
+interface DesignFormProps {
+  onSubmit: (images: string[]) => void; // now passes 3 images back
+}
+
+const DesignForm: React.FC<DesignFormProps> = ({ onSubmit }) => {
   const [input, setInput] = useState("");
+  const [isGenerating, setIsGenerating] = useState(false);
+
+  const handleSubmit = async () => {
+    if (!input.trim()) return;
+    setIsGenerating(true);
+
+    try {
+      const res = await fetch("/api/design/roomgpt", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          image: null,         // optional if using text only
+          roomType: "Living Room", // you could make this dynamic
+          style: input,        // send the description as style/prompt
+        }),
+      });
+
+      const data = await res.json();
+      console.log("🧠 API Response:", data);
+
+      if (data.images && Array.isArray(data.images)) {
+        onSubmit(data.images);
+      } else {
+        onSubmit([]);
+      }
+    } catch (err) {
+      console.error("❌ Error generating designs:", err);
+      onSubmit([]);
+    } finally {
+      setIsGenerating(false);
+    }
+  };
 
   return (
     <div className="p-6 bg-gray-100 rounded-lg shadow-md">
@@ -16,9 +52,10 @@ const DesignForm = ({ onSubmit }: { onSubmit: (input: string) => void }) => {
       ></textarea>
       <button
         className="mt-4 px-4 py-2 bg-blue-500 text-white rounded-lg"
-        onClick={() => onSubmit(input)}
+        onClick={handleSubmit}
+        disabled={isGenerating}
       >
-        Generate Design
+        {isGenerating ? "⏳ Generating..." : "Generate 3 Designs"}
       </button>
     </div>
   );
