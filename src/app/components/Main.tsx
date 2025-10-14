@@ -2,6 +2,9 @@
 import { useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Upload, Sparkles, X } from "lucide-react";
+import { db } from "@/lib/firebase";
+import { addDoc, collection, serverTimestamp } from "firebase/firestore";
+import { useAuth } from "@/context/AuthContext";
 
 const Main = () => {
   const [model, setModel] = useState("Professional");
@@ -11,12 +14,17 @@ const Main = () => {
   const [isDragging, setIsDragging] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
-
   const carouselRef = useRef<HTMLDivElement>(null);
 
-  // Upload image to Cloudinary via API
+  const { user } = useAuth();
+
+  // ✅ Upload image to Cloudinary via API
   const uploadToCloudinary = async (base64Image: string) => {
     try {
+      // Reset previous results and generation state when new upload starts
+      setGeneratedImages([]);
+      setIsGenerating(false);
+
       const res = await fetch("/api/design", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -26,7 +34,7 @@ const Main = () => {
       console.log("☁️ Cloudinary Upload:", data);
 
       if (data?.url) {
-        setUploadedImage(data.url); // ✅ hosted Cloudinary URL
+        setUploadedImage(data.url);
       } else {
         alert("Upload failed. Check console.");
       }
@@ -36,10 +44,13 @@ const Main = () => {
     }
   };
 
-  // Handle file input
+  // ✅ Handle file input
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    setGeneratedImages([]);
+    setIsGenerating(false);
 
     const reader = new FileReader();
     reader.onloadend = () => {
@@ -49,13 +60,16 @@ const Main = () => {
     reader.readAsDataURL(file);
   };
 
-  // Handle drag & drop
+  // ✅ Handle drag & drop
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     setIsDragging(false);
     const file = e.dataTransfer.files?.[0];
     if (!file) return;
 
+    setGeneratedImages([]);
+    setIsGenerating(false);
+
     const reader = new FileReader();
     reader.onloadend = () => {
       const base64Image = reader.result as string;
@@ -64,7 +78,7 @@ const Main = () => {
     reader.readAsDataURL(file);
   };
 
-  // Generate AI designs (calls /api/design/roomgpt)
+  // ✅ Generate AI designs (calls /api/design/roomgpt)
   const generateDesign = async () => {
     if (!uploadedImage) return;
     setIsGenerating(true);
@@ -75,7 +89,7 @@ const Main = () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          image: uploadedImage, // Cloudinary URL
+          image: uploadedImage,
           style: model,
           roomType,
         }),
@@ -86,6 +100,23 @@ const Main = () => {
 
       if (Array.isArray(data?.images) && data.images.length > 0) {
         setGeneratedImages(data.images);
+
+        // ✅ Save history to Firestore
+        try {
+          const userId = user?.uid || "guest";
+          const historyRef = collection(db, "user_history");
+          await addDoc(historyRef, {
+            userId,
+            originalImage: uploadedImage,
+            generatedImages: data.images,
+            model,
+            roomType,
+            createdAt: serverTimestamp(),
+          });
+          console.log("✅ Design saved to Firestore");
+        } catch (saveError) {
+          console.error("⚠️ Firestore Save Error:", saveError);
+        }
       } else {
         alert("No designs generated. Please check Replicate API.");
       }
@@ -97,7 +128,7 @@ const Main = () => {
     }
   };
 
-  // Scroll carousel
+  // ✅ Scroll carousel
   const scrollByCard = (dir: "left" | "right") => {
     const el = carouselRef.current;
     if (!el) return;
@@ -122,7 +153,10 @@ const Main = () => {
         </h1>
         <p className="mt-3 text-lg md:text-xl text-brown-light dark:text-gray-300">
           Upload your room and explore{" "}
-          <span className="font-semibold text-primary">3 stunning AI designs</span> instantly
+          <span className="font-semibold text-primary">
+            3 stunning AI designs
+          </span>{" "}
+          instantly
         </p>
       </motion.div>
 
@@ -167,7 +201,11 @@ const Main = () => {
               className="rounded-xl shadow-lg w-full object-cover"
             />
             <button
-              onClick={() => setUploadedImage(null)}
+              onClick={() => {
+                setUploadedImage(null);
+                setGeneratedImages([]);
+                setIsGenerating(false);
+              }}
               className="mt-4 px-5 py-2 bg-red-500 text-white rounded-full shadow hover:bg-red-600"
             >
               ❌ Remove
