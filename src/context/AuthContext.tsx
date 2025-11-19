@@ -1,5 +1,5 @@
 "use client";
-
+export const dynamic = "force-dynamic";
 import { createContext, useContext, useEffect, useState } from "react";
 import { auth, loginWithGoogle, logout as firebaseLogout } from "@/lib/firebase";
 import { onAuthStateChanged, User } from "firebase/auth";

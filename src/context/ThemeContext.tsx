@@ -1,6 +1,5 @@
 "use client";
 import React, { createContext, useContext, useEffect, useState } from "react";
-
 type Theme = "light" | "dark";
 type Ctx = { theme: Theme; toggleTheme: () => void; setTheme: (t: Theme) => void };
 
