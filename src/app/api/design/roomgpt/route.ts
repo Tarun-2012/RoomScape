@@ -1,6 +1,6 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
     const { image, style, roomType } = await req.json();
 
@@ -13,15 +13,16 @@ export async function POST(req: Request) {
 
     const prompt = `A ${roomType.toLowerCase()} designed in ${style.toLowerCase()} style.`;
 
-    // Run with 3 different seeds for variety
+    // Seeds used to generate 3 variations
     const seeds = [111, 222, 333];
 
-    const fetchPrediction = async (seed: number) => {
+    // Helper function to call Replicate API for one seed
+    const fetchPrediction = async (seed: number): Promise<string> => {
       const payload = {
         version:
-          "76604baddc85b1b4616e1c6475eca080da339c8875bd4996705440484a6eac38", // RoomGPT model version
+          "76604baddc85b1b4616e1c6475eca080da339c8875bd4996705440484a6eac38",
         input: {
-          image, // Cloudinary-hosted image URL
+          image, // URL from Cloudinary
           prompt,
           seed,
         },
@@ -44,50 +45,52 @@ export async function POST(req: Request) {
 
       if (prediction.error) throw new Error(prediction.error);
 
-      // Step 2: Poll until completed
-      const getStatus = async () => {
+      // Step 2: Poll status until completed
+      const pollResult = async () => {
         const statusRes = await fetch(prediction.urls.get, {
           headers: {
             Authorization: `Token ${process.env.REPLICATE_API_TOKEN}`,
           },
         });
+
         return statusRes.json();
       };
 
-      let result = await getStatus();
+      let result = await pollResult();
+
       while (result.status !== "succeeded" && result.status !== "failed") {
-        await new Promise((r) => setTimeout(r, 2000));
-        result = await getStatus();
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        result = await pollResult();
       }
 
       if (result.status === "succeeded") {
-        console.log("🖼 Replicate Result:", result);
-
         const output = result.output;
 
+        // Replicate sometimes returns array, sometimes string
         if (Array.isArray(output) && output.length > 0) {
-          return output[0]; // use first image from this seed
+          return output[0];
         } else if (typeof output === "string") {
-          return output; // sometimes replicate returns direct URL
+          return output;
         } else {
-          throw new Error("Unexpected output format from Replicate");
+          throw new Error("Unexpected output format from Replicate API");
         }
-      } else {
-        throw new Error("Prediction failed");
       }
+
+      throw new Error("Prediction failed");
     };
 
-    // Run all predictions in parallel for speed
-    const outputs = await Promise.all(seeds.map((s) => fetchPrediction(s)));
+    // Run all 3 predictions in parallel
+    const images = await Promise.all(seeds.map((seed) => fetchPrediction(seed)));
 
-    console.log("✅ Final AI Images:", outputs);
+    console.log("✅ Final AI Images:", images);
 
-    return NextResponse.json({ images: outputs });
-  } catch (error: any) {
+    return NextResponse.json({ images });
+  } catch (error) {
     console.error("❌ Error calling Replicate:", error);
-    return NextResponse.json(
-      { error: error.message || "Internal Server Error" },
-      { status: 500 }
-    );
+
+    const message =
+      error instanceof Error ? error.message : "Internal Server Error";
+
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

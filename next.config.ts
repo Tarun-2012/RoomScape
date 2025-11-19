@@ -1,11 +1,16 @@
-import type { NextConfig } from "next";
-
-const nextConfig: NextConfig = {
+/** @type {import('next').NextConfig} */
+const nextConfig = {
   eslint: {
-    // ✅ This prevents Vercel build from failing due to ESLint errors
-    ignoreDuringBuilds: true,
+    ignoreDuringBuilds: true, // Prevent Vercel ESLint failures
   },
-  /* other config options can stay here */
+  images: {
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "**", // Cloudinary, Replicate, Firebase
+      },
+    ],
+  },
 };
 
 export default nextConfig;
