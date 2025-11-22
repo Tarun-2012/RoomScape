@@ -1,90 +1,93 @@
 import { NextRequest, NextResponse } from "next/server";
 
+export const dynamic = "force-dynamic"; // needed for Vercel serverless
+
 export async function POST(req: NextRequest) {
   try {
     const { image, style, roomType } = await req.json();
 
     if (!image || !style || !roomType) {
       return NextResponse.json(
-        { error: "Missing fields (image, style, roomType)" },
+        { error: "Missing required fields (image, style, roomType)" },
         { status: 400 }
       );
     }
 
-    const prompt = `A ${roomType.toLowerCase()} designed in ${style.toLowerCase()} style.`;
+    const prompt = A ${roomType.toLowerCase()} designed in ${style.toLowerCase()} style.;
 
-    const modelVersion =
+    // ==== Replicate Model Version ====
+    const MODEL_VERSION =
       "76604baddc85b1b4616e1c6475eca080da339c8875bd4996705440484a6eac38";
 
-    async function runSeed(seed: number): Promise<string> {
-      // 1. Create prediction
-      const createRes = await fetch("https://api.replicate.com/v1/predictions", {
+    // === Instead of polling → use Replicate STREAM API ===
+    const streamRes = await fetch("https://api.replicate.com/v1/predictions", {
+      method: "POST",
+      headers: {
+        Authorization: Token ${process.env.REPLICATE_API_TOKEN},
+        "Content-Type": "application/json",
+        Prefer: "wait",
+      },
+      body: JSON.stringify({
+        version: MODEL_VERSION,
+        input: {
+          image,
+          prompt,
+          seed: 111, // We will generate 3 images separately
+        },
+      }),
+    });
+
+    const prediction1 = await streamRes.json();
+
+    if (prediction1?.error) {
+      return NextResponse.json({ error: prediction1.error }, { status: 500 });
+    }
+
+    // FETCH THE OUTPUT DIRECTLY (streaming auto-resolves the final result)
+    const output1 = prediction1.output;
+
+    // RUN 2ND + 3RD PREDICTIONS IN PARALLEL (with "Prefer: wait" mode)
+    const fetchImage = async (seed: number) => {
+      const r = await fetch("https://api.replicate.com/v1/predictions", {
         method: "POST",
         headers: {
-          Authorization: `Token ${process.env.REPLICATE_API_TOKEN}`,
+          Authorization: Token ${process.env.REPLICATE_API_TOKEN},
           "Content-Type": "application/json",
+          Prefer: "wait",
         },
         body: JSON.stringify({
-          version: modelVersion,
+          version: MODEL_VERSION,
           input: { image, prompt, seed },
         }),
       });
 
-      const prediction = await createRes.json();
-      console.log("Replicate prediction response:", prediction);
+      const json = await r.json();
+      return json.output?.[0] || null;
+    };
 
-      if (!prediction.urls || !prediction.urls.get) {
-        throw new Error("Replicate did not return a valid prediction URL");
-      }
+    const [img2, img3] = await Promise.all([
+      fetchImage(222),
+      fetchImage(333),
+    ]);
 
-      // 2. Poll status UNTIL finished
-      async function poll() {
-        const res = await fetch(prediction.urls.get, {
-          headers: {
-            Authorization: `Token ${process.env.REPLICATE_API_TOKEN}`,
-          },
-        });
+    const finalImages = [
+      output1?.[0] || null,
+      img2,
+      img3,
+    ].filter(Boolean);
 
-        const data = await res.json();
-        return data;
-      }
-
-      let result = await poll();
-
-      while (result.status !== "succeeded" && result.status !== "failed") {
-        await new Promise((r) => setTimeout(r, 2500));
-        result = await poll();
-      }
-
-      if (result.status === "failed") {
-        throw new Error("Replicate failed for seed " + seed);
-      }
-
-      const output = result.output;
-
-      if (Array.isArray(output) && output.length > 0) return output[0];
-      if (typeof output === "string") return output;
-
-      throw new Error("Unexpected Replicate output");
+    if (finalImages.length === 0) {
+      return NextResponse.json(
+        { error: "Replicate returned no images." },
+        { status: 500 }
+      );
     }
 
-    // -------------------------------
-    // RUN SEEDS **SEQUENTIALLY**
-    // -------------------------------
-    const images: string[] = [];
-
-    for (const seed of [111, 222, 333]) {
-      console.log("⚡ Running seed:", seed);
-      const img = await runSeed(seed);
-      images.push(img);
-      await new Promise((r) => setTimeout(r, 11000)); // wait 11 seconds per Replicate limit
-    }
-
-    return NextResponse.json({ images });
-  } catch (error: any) {
-    console.error("❌ Replicate API Error:", error);
+    return NextResponse.json({ images: finalImages });
+  } catch (err: any) {
+    console.error("❌ Replicate API Error:", err);
     return NextResponse.json(
-      { error: error?.message || "Internal error" },
+      { error: err.message || "Internal Server Error" },
       { status: 500 }
     );
   }
